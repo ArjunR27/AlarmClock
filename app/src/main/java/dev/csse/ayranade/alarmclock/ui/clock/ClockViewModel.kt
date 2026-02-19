@@ -16,6 +16,13 @@ data class ClockUiState(
 )
 
 class ClockViewModel() : ViewModel() {
+    // StateFlow
+        // Observable state holder (read-only)
+        // When value changes it emits the new value to all collectors
+
+    // MutableStateFlow
+        // Mutable version used inside the class
+        // read/write only used inside ViewModel itself
     private val _uiState = MutableStateFlow(ClockUiState())
     val clockUiState : StateFlow<ClockUiState> = _uiState.asStateFlow()
 
