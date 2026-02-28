@@ -1,6 +1,7 @@
 package dev.csse.ayranade.alarmclock.ui.audios
 
 import android.media.MediaPlayer
+import android.provider.AlarmClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,21 +38,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import dev.csse.ayranade.alarmclock.AlarmClockApplication
 
 // Not implemented
-
 @Preview
 @Composable
 fun AudioScreenPreview() {
     AudioScreen(navController = rememberNavController())
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScreen(
     navController: NavController,
-    viewModel: SoundsViewModel = viewModel()
 ) {
+    val app = LocalContext.current.applicationContext as AlarmClockApplication
+    val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(app.audioRepository))
     val uiState by viewModel.soundUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var currentPlayer by remember { mutableStateOf<MediaPlayer?>(null) }

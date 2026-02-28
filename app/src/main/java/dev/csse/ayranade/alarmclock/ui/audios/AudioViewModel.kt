@@ -2,10 +2,25 @@ package dev.csse.ayranade.alarmclock.ui.audios
 
 import android.provider.Settings
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
 
 data class AlarmSound(
     val alarmSoundId: Int,
@@ -19,14 +34,37 @@ data class SoundsUiState(
     val selectedSoundId: Int? = null
 )
 
+@Entity(tableName = "sounds")
+data class AlarmSoundEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val fileUri: String,
+    val isCustom: Boolean
+)
+
+@Dao
+interface AudioDao {
+    @Query("SELECT * from sounds")
+    fun getAllSounds(): Flow<List<AlarmSoundEntity>>
+
+    @Insert
+    suspend fun insert(sound: AlarmSoundEntity)
+
+    @Delete
+    suspend fun delete(sound: AlarmSoundEntity)
+}
+
 private var nextId = 1
 private fun getNextId() = nextId++
 
-class SoundsViewModel() : ViewModel() {
+class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(SoundsUiState())
     val soundUiState : StateFlow<SoundsUiState> = _uiState.asStateFlow()
 
     val soundPath = "android.resource://dev.csse.ayranade.alarmclock/raw/"
+
+    val customSounds: StateFlow<List<AlarmSoundEntity>> = repository.getAllSounds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         loadDefaultSounds()
@@ -54,22 +92,28 @@ class SoundsViewModel() : ViewModel() {
     }
 
     fun addCustomSound(name: String, uri: String) {
-        val newSound = AlarmSound(
-            alarmSoundId = getNextId(),
-            name = name,
-            fileUri = uri,
-        )
-
-        _uiState.update {it.copy(customSounds = _uiState.value.customSounds + newSound)}
+        viewModelScope.launch {
+            repository.insert(AlarmSoundEntity(name=name, fileUri = uri, isCustom = true))
+        }
     }
 
-    // Users can delete a sound
-    fun deleteCustomSound(id: Int) {
-        // Not implemented
+    fun deleteCustomSound(sound: AlarmSoundEntity) {
+        viewModelScope.launch {
+            repository.delete(sound)
+        }
     }
-
     // Users can select a sound for an alarm
     fun selectSound(id: Int) {
         // Not implemented
+    }
+}
+
+class AudioViewModelFactory(private val repository: AudioRepository) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(AudioViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return AudioViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

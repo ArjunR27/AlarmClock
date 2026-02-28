@@ -1,0 +1,10 @@
+package dev.csse.ayranade.alarmclock.ui.audios
+
+import kotlinx.coroutines.flow.Flow
+
+class AudioRepository(private val dao: AudioDao) {
+    fun getAllSounds(): Flow<List<AlarmSoundEntity>> = dao.getAllSounds()
+    suspend fun insert(sound: AlarmSoundEntity) = dao.insert(sound)
+    suspend fun delete(sound: AlarmSoundEntity) = dao.delete(sound)
+
+}
