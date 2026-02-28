@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
@@ -32,20 +31,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 
 // Not implemented
 
+@Preview
+@Composable
+fun AudioScreenPreview() {
+    AudioScreen(navController = rememberNavController())
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Preview
-fun AudioScreen(viewModel: SoundsViewModel = viewModel()) {
+fun AudioScreen(
+    navController: NavController,
+    viewModel: SoundsViewModel = viewModel()
+) {
     val uiState by viewModel.soundUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var currentPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var showSheet by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -60,15 +70,15 @@ fun AudioScreen(viewModel: SoundsViewModel = viewModel()) {
                 title = {
                     Row(modifier = Modifier.fillMaxWidth()) {
                         TextButton(
-                            onClick = { },
+                            onClick = { navController.navigate("clock") },
                             modifier = Modifier.weight(1f)
                         ) { Text("Clock") }
                         TextButton(
-                            onClick = { },
+                            onClick = { navController.navigate("alarms") },
                             modifier = Modifier.weight(1f)
                         ) { Text("Alarms") }
                         TextButton(
-                            onClick = { },
+                            onClick = { navController.navigate("sounds") },
                             modifier = Modifier.weight(1f)
                         ) { Text("Sounds") }
                     }
@@ -77,7 +87,7 @@ fun AudioScreen(viewModel: SoundsViewModel = viewModel()) {
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { }
+                onClick = { showSheet = true }
             ) {
                 Icon(Icons.Default.AddCircle, contentDescription = "Add")
             }

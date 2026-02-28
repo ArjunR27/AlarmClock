@@ -46,8 +46,8 @@ class SoundsViewModel() : ViewModel() {
             ),
             AlarmSound(
                 alarmSoundId = getNextId(),
-                name = "Ringtone",
-                fileUri = Settings.System.DEFAULT_RINGTONE_URI.toString()
+                name = "Default Alarm   ",
+                fileUri = Settings.System.DEFAULT_ALARM_ALERT_URI.toString()
             )
         )
         _uiState.update {it.copy(defaultSounds = defaults)}

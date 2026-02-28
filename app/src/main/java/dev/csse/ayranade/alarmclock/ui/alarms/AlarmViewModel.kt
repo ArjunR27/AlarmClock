@@ -27,6 +27,42 @@ class AlarmViewModel() : ViewModel() {
     private val _uiState = MutableStateFlow(AlarmUiState())
     val alarmUiState : StateFlow<AlarmUiState> = _uiState.asStateFlow()
 
+    init {
+        loadDefaultAlarms()
+    }
+
+    private fun loadDefaultAlarms() {
+        val defaultAlarms = listOf(
+            Alarm(
+                alarmId = getNextId(),
+                hour = 6,
+                minute = 30,
+                label = "Weekday Run",
+                alarmSoundId = 1,
+                daysOfWeek = listOf(1, 2, 3, 4, 5)
+            ),
+            Alarm(
+                alarmId = getNextId(),
+                hour = 8,
+                minute = 0,
+                label = "Standup",
+                alarmSoundId = 2,
+                daysOfWeek = listOf(1, 2, 3, 4, 5)
+            ),
+            Alarm(
+                alarmId = getNextId(),
+                hour = 10,
+                minute = 15,
+                label = "Weekend Chores",
+                isEnabled = false,
+                alarmSoundId = 3,
+                daysOfWeek = listOf(6)
+            )
+        )
+
+        _uiState.update { it.copy(alarms = defaultAlarms.associateBy { alarm -> alarm.alarmId }) }
+    }
+
     fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>) {
         val alarmId = getNextId()
         val newAlarm = Alarm(
@@ -40,10 +76,14 @@ class AlarmViewModel() : ViewModel() {
         _uiState.update {it.copy(alarms = (it.alarms + (alarmId to newAlarm)))}
     }
 
-    fun disableAlarm(alarmId: Int) {
-        _uiState.update {state ->
-            val updatedAlarm = state.alarms[alarmId]?.copy(isEnabled = false) ?: return@update state
+    fun setAlarmEnabled(alarmId: Int, isEnabled: Boolean) {
+        _uiState.update { state ->
+            val updatedAlarm = state.alarms[alarmId]?.copy(isEnabled = isEnabled) ?: return@update state
             state.copy(alarms = state.alarms + (alarmId to updatedAlarm))
         }
+    }
+
+    fun disableAlarm(alarmId: Int) {
+        setAlarmEnabled(alarmId = alarmId, isEnabled = false)
     }
 }
