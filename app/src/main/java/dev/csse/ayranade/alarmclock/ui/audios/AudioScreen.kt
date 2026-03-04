@@ -1,7 +1,8 @@
 package dev.csse.ayranade.alarmclock.ui.audios
 
+
+import androidx.compose.material3.AlertDialog
 import android.media.MediaPlayer
-import android.provider.AlarmClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,19 +33,78 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import dev.csse.ayranade.alarmclock.AlarmClockApplication
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 
 // Not implemented
 @Preview
 @Composable
 fun AudioScreenPreview() {
     AudioScreen(navController = rememberNavController())
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AudioAddDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, fileUri: String, isCustom: Boolean) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var fileUri by remember { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            fileUri = uri.toString()
+            if (name.isBlank()) {
+                name = uri.lastPathSegment ?: ""
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Sound") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide()})
+                )
+                TextButton(onClick = { filePicker.launch("audio/*" )}) {
+                    Text(if (fileUri.isBlank()) "Chose file..." else "File chosen!")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name, fileUri, true) },
+                enabled = name.isNotBlank() && fileUri.isNotBlank() // disable Save until both are filled
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +116,7 @@ fun AudioScreen(
     val uiState by viewModel.soundUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var currentPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var showSheet by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -88,7 +148,7 @@ fun AudioScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showSheet = true }
+                onClick = { showDialog = true }
             ) {
                 Icon(Icons.Default.AddCircle, contentDescription = "Add")
             }
@@ -104,11 +164,12 @@ fun AudioScreen(
         ) {
             items(uiState.defaultSounds) { sound ->
                 Card(
-                    modifier = Modifier.fillMaxWidth()) {
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 20.dp, horizontal = 16.dp),
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp, horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -138,6 +199,16 @@ fun AudioScreen(
                     }
                 }
             }
+        }
+
+        if (showDialog) {
+            AudioAddDialog(
+                onDismiss = { showDialog = false },
+                onConfirm = { name, fileUri, isCustom ->
+                    viewModel.addCustomSound(name = name, uri = fileUri)
+                    showDialog = false
+                }
+            )
         }
     }
 }

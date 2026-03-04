@@ -17,7 +17,8 @@ data class Alarm(
     val label: String = "",
     var isEnabled: Boolean = true,
     var alarmSoundId: Int? = null,
-    var daysOfWeek: List<Int> = emptyList()
+    var daysOfWeek: List<Int> = emptyList(),
+    var am : Boolean = true,
 )
 
 data class AlarmUiState(
@@ -39,7 +40,8 @@ class AlarmViewModel() : ViewModel() {
                 minute = 30,
                 label = "Weekday Run",
                 alarmSoundId = 1,
-                daysOfWeek = listOf(1, 2, 3, 4, 5)
+                daysOfWeek = listOf(1, 2, 3, 4, 5),
+                am = true
             ),
             Alarm(
                 alarmId = getNextId(),
@@ -47,7 +49,8 @@ class AlarmViewModel() : ViewModel() {
                 minute = 0,
                 label = "Standup",
                 alarmSoundId = 2,
-                daysOfWeek = listOf(1, 2, 3, 4, 5)
+                daysOfWeek = listOf(1, 2, 3, 4, 5),
+                am = true,
             ),
             Alarm(
                 alarmId = getNextId(),
@@ -56,14 +59,15 @@ class AlarmViewModel() : ViewModel() {
                 label = "Weekend Chores",
                 isEnabled = false,
                 alarmSoundId = 3,
-                daysOfWeek = listOf(6)
+                daysOfWeek = listOf(6),
+                am = false
             )
         )
 
         _uiState.update { it.copy(alarms = defaultAlarms.associateBy { alarm -> alarm.alarmId }) }
     }
 
-    fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>) {
+    fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>, am: Boolean) {
         val alarmId = getNextId()
         val newAlarm = Alarm(
             alarmId = alarmId,
@@ -71,7 +75,8 @@ class AlarmViewModel() : ViewModel() {
             minute = minute,
             label = label,
             alarmSoundId = alarmSoundId,
-            daysOfWeek = daysOfWeek
+            daysOfWeek = daysOfWeek,
+            am = am
         )
         _uiState.update {it.copy(alarms = (it.alarms + (alarmId to newAlarm)))}
     }
