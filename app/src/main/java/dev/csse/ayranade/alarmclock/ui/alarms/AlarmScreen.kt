@@ -46,12 +46,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import kotlinx.coroutines.selects.select
 
-@Preview
-@Composable
-fun AlarmScreenPreview() {
-    AlarmScreen(navController = rememberNavController())
-}
-
 private fun formatAlarmTime(alarm: Alarm): String {
     return String.format("%02d:%02d", alarm.hour, alarm.minute)
 }
@@ -176,7 +170,7 @@ fun AddAlarmDialog(
 @Composable
 fun AlarmScreen(
     navController: NavController,
-    viewModel: AlarmViewModel = viewModel()
+    viewModel: AlarmViewModel
 ) {
     val uiState by viewModel.alarmUiState.collectAsStateWithLifecycle()
     var showDialog by remember { mutableStateOf(false) }

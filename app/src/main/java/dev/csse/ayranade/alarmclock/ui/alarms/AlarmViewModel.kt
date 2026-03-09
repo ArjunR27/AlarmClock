@@ -1,10 +1,14 @@
 package dev.csse.ayranade.alarmclock.ui.alarms
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 private var nextId = 1
 private fun getNextId() = nextId++
@@ -24,12 +28,30 @@ data class Alarm(
 data class AlarmUiState(
     val alarms: Map<Int, Alarm> = HashMap<Int, Alarm>()
 )
-class AlarmViewModel() : ViewModel() {
+
+class AlarmViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        @Suppress("UNCHECKED_CAST")
+        return AlarmViewModel(context.applicationContext) as T
+    }
+}
+
+
+class AlarmViewModel(private val context: Context) : ViewModel() {
     private val _uiState = MutableStateFlow(AlarmUiState())
     val alarmUiState : StateFlow<AlarmUiState> = _uiState.asStateFlow()
 
     init {
-        loadDefaultAlarms()
+        viewModelScope.launch {
+            AlarmStorage.loadAlarms(context).collect { alarms ->
+                if (alarms.isEmpty()) loadDefaultAlarms()
+                else _uiState.update { it.copy(alarms = alarms.associateBy { a -> a.alarmId })}
+            }
+        }
+    }
+
+    private fun save() {
+        viewModelScope.launch { AlarmStorage.saveAlarms(context, _uiState.value.alarms) }
     }
 
     private fun loadDefaultAlarms() {
@@ -65,27 +87,21 @@ class AlarmViewModel() : ViewModel() {
         )
 
         _uiState.update { it.copy(alarms = defaultAlarms.associateBy { alarm -> alarm.alarmId }) }
+        save()
     }
 
     fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>, am: Boolean) {
         val alarmId = getNextId()
-        val newAlarm = Alarm(
-            alarmId = alarmId,
-            hour = hour,
-            minute = minute,
-            label = label,
-            alarmSoundId = alarmSoundId,
-            daysOfWeek = daysOfWeek,
-            am = am
-        )
-        _uiState.update {it.copy(alarms = (it.alarms + (alarmId to newAlarm)))}
+        _uiState.update { it.copy(alarms = it.alarms + (alarmId to Alarm(alarmId, hour, minute, label = label, alarmSoundId = alarmSoundId, daysOfWeek = daysOfWeek, am = am))) }
+        save()
     }
 
     fun setAlarmEnabled(alarmId: Int, isEnabled: Boolean) {
         _uiState.update { state ->
-            val updatedAlarm = state.alarms[alarmId]?.copy(isEnabled = isEnabled) ?: return@update state
-            state.copy(alarms = state.alarms + (alarmId to updatedAlarm))
+            val updated = state.alarms[alarmId]?.copy(isEnabled = isEnabled) ?: return@update state
+            state.copy(alarms = state.alarms + (alarmId to updated))
         }
+        save()
     }
 
     fun disableAlarm(alarmId: Int) {
