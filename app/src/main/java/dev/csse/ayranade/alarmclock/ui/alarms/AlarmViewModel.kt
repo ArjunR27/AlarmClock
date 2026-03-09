@@ -10,9 +10,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private var nextId = 1
-private fun getNextId() = nextId++
-
 data class Alarm(
     val alarmId: Int,
     var hour: Int,
@@ -26,7 +23,7 @@ data class Alarm(
 )
 
 data class AlarmUiState(
-    val alarms: Map<Int, Alarm> = HashMap<Int, Alarm>()
+    val alarms: Map<Int, Alarm> = emptyMap()
 )
 
 class AlarmViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
@@ -54,10 +51,15 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch { AlarmStorage.saveAlarms(context, _uiState.value.alarms) }
     }
 
+    private fun nextAlarmId(state: AlarmUiState): Int {
+        return (state.alarms.keys.maxOrNull() ?: 0) + 1
+    }
+
     private fun loadDefaultAlarms() {
+        var nextAlarmId = 1
         val defaultAlarms = listOf(
             Alarm(
-                alarmId = getNextId(),
+                alarmId = nextAlarmId++,
                 hour = 6,
                 minute = 30,
                 label = "Weekday Run",
@@ -66,7 +68,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 am = true
             ),
             Alarm(
-                alarmId = getNextId(),
+                alarmId = nextAlarmId++,
                 hour = 8,
                 minute = 0,
                 label = "Standup",
@@ -75,7 +77,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 am = true,
             ),
             Alarm(
-                alarmId = getNextId(),
+                alarmId = nextAlarmId++,
                 hour = 10,
                 minute = 15,
                 label = "Weekend Chores",
@@ -91,8 +93,22 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
     }
 
     fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>, am: Boolean) {
-        val alarmId = getNextId()
-        _uiState.update { it.copy(alarms = it.alarms + (alarmId to Alarm(alarmId, hour, minute, label = label, alarmSoundId = alarmSoundId, daysOfWeek = daysOfWeek, am = am))) }
+        _uiState.update { state ->
+            val alarmId = nextAlarmId(state)
+            state.copy(
+                alarms = state.alarms + (
+                    alarmId to Alarm(
+                        alarmId = alarmId,
+                        hour = hour,
+                        minute = minute,
+                        label = label,
+                        alarmSoundId = alarmSoundId,
+                        daysOfWeek = daysOfWeek,
+                        am = am
+                    )
+                )
+            )
+        }
         save()
     }
 
