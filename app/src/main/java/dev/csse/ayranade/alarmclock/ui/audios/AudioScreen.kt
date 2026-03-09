@@ -1,6 +1,8 @@
 package dev.csse.ayranade.alarmclock.ui.audios
 
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.material3.AlertDialog
 import android.media.MediaPlayer
 import androidx.compose.foundation.layout.Arrangement
@@ -63,11 +65,19 @@ fun AudioAddDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var fileUri by remember { mutableStateOf("") }
+    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
     val filePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             fileUri = uri.toString()
             if (name.isBlank()) {
                 name = uri.lastPathSegment ?: ""
@@ -85,17 +95,17 @@ fun AudioAddDialog(
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide()})
+                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
                 )
-                TextButton(onClick = { filePicker.launch("audio/*" )}) {
-                    Text(if (fileUri.isBlank()) "Chose file..." else "File chosen!")
+                TextButton(onClick = { filePicker.launch(arrayOf("audio/*")) }) {
+                    Text(if (fileUri.isBlank()) "Choose file..." else "File chosen!")
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(name, fileUri, true) },
-                enabled = name.isNotBlank() && fileUri.isNotBlank() // disable Save until both are filled
+                enabled = name.isNotBlank() && fileUri.isNotBlank()
             ) {
                 Text("Save")
             }
@@ -104,8 +114,8 @@ fun AudioAddDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
-
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScreen(
@@ -162,41 +172,37 @@ fun AudioScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(uiState.defaultSounds) { sound ->
-                Card(
+            item {
+                Text(
+                    text = "Default sounds",
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
+                )
+            }
+            items(uiState.defaultSounds) { sound ->
+                SoundCard(
+                    sound = sound,
+                    context = context,
+                    currentPlayer = currentPlayer,
+                    onPlayerChange = { currentPlayer = it }
+                )
+            }
+
+            if (uiState.customSounds.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Custom sounds",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 20.dp, horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = sound.name,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            onClick = {
-                                currentPlayer?.release()
-                                currentPlayer = null
-
-                                val player = MediaPlayer.create(context, sound.fileUri.toUri())
-                                if (player != null) {
-                                    currentPlayer = player
-                                    player.setOnCompletionListener { completedPlayer ->
-                                        completedPlayer.release()
-                                        if (currentPlayer == completedPlayer) {
-                                            currentPlayer = null
-                                        }
-                                    }
-                                    player.start()
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Add")
-                        }
-                    }
+                            .padding(top = 8.dp)
+                    )
+                }
+                items(uiState.customSounds) { sound ->
+                    SoundCard(
+                        sound = sound,
+                        context = context,
+                        currentPlayer = currentPlayer,
+                        onPlayerChange = { currentPlayer = it }
+                    )
                 }
             }
         }
@@ -209,6 +215,48 @@ fun AudioScreen(
                     showDialog = false
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun SoundCard(
+    sound: AlarmSound,
+    context: Context,
+    currentPlayer: MediaPlayer?,
+    onPlayerChange: (MediaPlayer?) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp, horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = sound.name,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = {
+                    currentPlayer?.release()
+                    onPlayerChange(null)
+
+                    val player = MediaPlayer.create(context, sound.fileUri.toUri())
+                    if (player != null) {
+                        onPlayerChange(player)
+                        player.setOnCompletionListener { completedPlayer ->
+                            completedPlayer.release()
+                            onPlayerChange(null)
+                        }
+                        player.start()
+                    }
+                }
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Play")
+            }
         }
     }
 }

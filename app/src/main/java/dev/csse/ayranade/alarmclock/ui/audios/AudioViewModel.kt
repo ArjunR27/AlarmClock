@@ -4,20 +4,17 @@ import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -57,17 +54,23 @@ interface AudioDao {
 private var nextId = 1
 private fun getNextId() = nextId++
 
+private fun AlarmSoundEntity.toAlarmSound(): AlarmSound =
+    AlarmSound(
+        alarmSoundId = id,
+        name = name,
+        fileUri = fileUri,
+        isCustom = isCustom
+    )
+
 class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(SoundsUiState())
     val soundUiState : StateFlow<SoundsUiState> = _uiState.asStateFlow()
 
     val soundPath = "android.resource://dev.csse.ayranade.alarmclock/raw/"
 
-    val customSounds: StateFlow<List<AlarmSoundEntity>> = repository.getAllSounds()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     init {
         loadDefaultSounds()
+        observeCustomSounds()
     }
 
     private fun loadDefaultSounds() {
@@ -89,6 +92,16 @@ class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
             )
         )
         _uiState.update {it.copy(defaultSounds = defaults)}
+    }
+
+    private fun observeCustomSounds() {
+        viewModelScope.launch {
+            repository.getAllSounds().collect { sounds ->
+                _uiState.update { currentState ->
+                    currentState.copy(customSounds = sounds.map { it.toAlarmSound() })
+                }
+            }
+        }
     }
 
     fun addCustomSound(name: String, uri: String) {
