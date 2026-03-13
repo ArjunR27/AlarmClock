@@ -1,6 +1,5 @@
 package dev.csse.ayranade.alarmclock.ui.audios
 
-import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -45,6 +44,9 @@ interface AudioDao {
     @Query("SELECT * from sounds")
     fun getAllSounds(): Flow<List<AlarmSoundEntity>>
 
+    @Query("SELECT * from sounds")
+    suspend fun getAllSoundsOnce(): List<AlarmSoundEntity>
+
     @Insert
     suspend fun insert(sound: AlarmSoundEntity)
 
@@ -55,31 +57,9 @@ interface AudioDao {
     suspend fun deleteByIds(soundIds: List<Int>)
 }
 
-private const val DEFAULT_NO_POLE_SOUND_ID = 1
-private const val DEFAULT_NOTIFICATION_SOUND_ID = 2
-private const val DEFAULT_ALARM_SOUND_ID = 3
-
-private const val DEFAULT_NO_POLE_STABLE_ID = "default:no_pole"
-private const val DEFAULT_NOTIFICATION_STABLE_ID = "default:notification"
-const val DEFAULT_ALARM_STABLE_ID = "default:alarm"
-const val DEFAULT_ALARM_SOUND_NAME = "Default Alarm Sound"
-
-private fun customStableSoundId(id: Int) = "custom:$id"
-
-private fun AlarmSoundEntity.toAlarmSound(): AlarmSound =
-    AlarmSound(
-        stableId = customStableSoundId(id),
-        alarmSoundId = id,
-        name = name,
-        fileUri = fileUri,
-        isCustom = isCustom
-    )
-
 class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(SoundsUiState())
     val soundUiState : StateFlow<SoundsUiState> = _uiState.asStateFlow()
-
-    val soundPath = "android.resource://dev.csse.ayranade.alarmclock/raw/"
 
     init {
         loadDefaultSounds()
@@ -87,26 +67,7 @@ class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
     }
 
     private fun loadDefaultSounds() {
-        val defaults = listOf<AlarmSound>(
-            AlarmSound(
-                stableId = DEFAULT_NO_POLE_STABLE_ID,
-                alarmSoundId = DEFAULT_NO_POLE_SOUND_ID,
-                name = "No Pole - Don Toliver",
-                fileUri = soundPath + "no_pole"
-            ),
-            AlarmSound(
-                stableId = DEFAULT_NOTIFICATION_STABLE_ID,
-                alarmSoundId = DEFAULT_NOTIFICATION_SOUND_ID,
-                name = "Notification Tone",
-                fileUri = Settings.System.DEFAULT_NOTIFICATION_URI.toString()
-            ),
-            AlarmSound(
-                stableId = DEFAULT_ALARM_STABLE_ID,
-                alarmSoundId = DEFAULT_ALARM_SOUND_ID,
-                name = DEFAULT_ALARM_SOUND_NAME,
-                fileUri = Settings.System.DEFAULT_ALARM_ALERT_URI.toString()
-            )
-        )
+        val defaults = defaultAlarmSounds()
         _uiState.update {it.copy(defaultSounds = defaults)}
     }
 

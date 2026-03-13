@@ -202,7 +202,7 @@ fun AudioScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (selectedCustomSoundIds.isEmpty()) "Select custom sounds" else "${selectedCustomSoundIds.size} selected"
+                    text = if (selectedCustomSoundIds.isEmpty()) "Select Custom Sounds" else "${selectedCustomSoundIds.size} selected"
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(

@@ -47,7 +47,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
     init {
         viewModelScope.launch {
             AlarmStorage.loadAlarms(context).collect { alarms ->
-                val normalizedAlarms = alarms.map { it.normalize() }
+                val normalizedAlarms = alarms.map { it.normalized() }
 
                 if (normalizedAlarms.isEmpty()) {
                     loadDefaultAlarms()
@@ -58,13 +58,11 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                     if (normalizedAlarms != alarms) {
                         AlarmStorage.saveAlarms(context, alarmMap)
                     }
+
+                    AlarmScheduler.reconcileEnabledAlarms(context, alarmMap.values)
                 }
             }
         }
-    }
-
-    private fun save() {
-        viewModelScope.launch { AlarmStorage.saveAlarms(context, _uiState.value.alarms) }
     }
 
     private fun nextAlarmId(state: AlarmUiState): Int {
@@ -104,36 +102,63 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
             )
         )
 
-        _uiState.update { it.copy(alarms = defaultAlarms.associateBy { alarm -> alarm.alarmId }) }
-        save()
+        val alarmMap = defaultAlarms.associateBy { alarm -> alarm.alarmId }
+        _uiState.update { it.copy(alarms = alarmMap) }
+
+        viewModelScope.launch {
+            AlarmStorage.saveAlarms(context, alarmMap)
+            AlarmScheduler.reconcileEnabledAlarms(context, alarmMap.values)
+        }
     }
 
-    fun addAlarm(hour: Int, minute: Int, label: String, soundId: String, daysOfWeek: List<Int>, am: Boolean) {
-        _uiState.update { state ->
+    fun addAlarm(
+        hour: Int,
+        minute: Int,
+        label: String,
+        soundId: String,
+        daysOfWeek: List<Int>,
+        am: Boolean,
+        isEnabled: Boolean = true
+    ) {
+        viewModelScope.launch {
+            val state = _uiState.value
             val alarmId = nextAlarmId(state)
-            state.copy(
-                alarms = state.alarms + (
-                    alarmId to Alarm(
-                        alarmId = alarmId,
-                        hour = hour,
-                        minute = minute,
-                        label = label,
-                        soundId = soundId,
-                        daysOfWeek = daysOfWeek,
-                        am = am
-                    )
-                )
+            val newAlarm = Alarm(
+                alarmId = alarmId,
+                hour = hour,
+                minute = minute,
+                label = label,
+                soundId = soundId,
+                daysOfWeek = daysOfWeek,
+                am = am,
+                isEnabled = isEnabled
             )
+            val updatedAlarms = state.alarms + (alarmId to newAlarm)
+            _uiState.value = state.copy(alarms = updatedAlarms)
+            AlarmStorage.saveAlarms(context, updatedAlarms)
+
+            if (newAlarm.isEnabled) {
+                AlarmScheduler.scheduleAlarm(context, newAlarm)
+            } else {
+                AlarmScheduler.cancelAlarm(context, newAlarm.alarmId)
+            }
         }
-        save()
     }
 
     fun setAlarmEnabled(alarmId: Int, isEnabled: Boolean) {
-        _uiState.update { state ->
-            val updated = state.alarms[alarmId]?.copy(isEnabled = isEnabled) ?: return@update state
-            state.copy(alarms = state.alarms + (alarmId to updated))
+        viewModelScope.launch {
+            val state = _uiState.value
+            val updated = state.alarms[alarmId]?.copy(isEnabled = isEnabled) ?: return@launch
+            val updatedAlarms = state.alarms + (alarmId to updated)
+            _uiState.value = state.copy(alarms = updatedAlarms)
+            AlarmStorage.saveAlarms(context, updatedAlarms)
+
+            if (isEnabled) {
+                AlarmScheduler.scheduleAlarm(context, updated)
+            } else {
+                AlarmScheduler.cancelAlarm(context, alarmId)
+            }
         }
-        save()
     }
 
     fun disableAlarm(alarmId: Int) {
@@ -143,18 +168,14 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
     fun deleteAlarms(alarmIds: Set<Int>) {
         if (alarmIds.isEmpty()) return
 
-        _uiState.update { state ->
-            state.copy(alarms = state.alarms.filterKeys { it !in alarmIds })
+        viewModelScope.launch {
+            val state = _uiState.value
+            val updatedAlarms = state.alarms.filterKeys { it !in alarmIds }
+            _uiState.value = state.copy(alarms = updatedAlarms)
+            AlarmStorage.saveAlarms(context, updatedAlarms)
+            alarmIds.forEach { alarmId ->
+                AlarmScheduler.cancelAlarm(context, alarmId)
+            }
         }
-        save()
-    }
-}
-
-private fun Alarm.normalize(): Alarm {
-    val normalizedSoundId = soundId ?: DEFAULT_ALARM_STABLE_ID
-    return if (normalizedSoundId == soundId && alarmSoundId == null) {
-        this
-    } else {
-        copy(soundId = normalizedSoundId, alarmSoundId = null)
     }
 }
