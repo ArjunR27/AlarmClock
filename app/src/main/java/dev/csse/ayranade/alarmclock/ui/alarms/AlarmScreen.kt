@@ -1,10 +1,14 @@
 package dev.csse.ayranade.alarmclock.ui.alarms
 
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,11 +18,18 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -26,25 +37,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
-import androidx.compose.material3.FilterChip
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import kotlinx.coroutines.selects.select
+import dev.csse.ayranade.alarmclock.AlarmClockApplication
+import dev.csse.ayranade.alarmclock.ui.audios.AlarmSound
+import dev.csse.ayranade.alarmclock.ui.audios.AudioViewModel
+import dev.csse.ayranade.alarmclock.ui.audios.AudioViewModelFactory
+import dev.csse.ayranade.alarmclock.ui.audios.DEFAULT_ALARM_SOUND_NAME
+import dev.csse.ayranade.alarmclock.ui.audios.DEFAULT_ALARM_STABLE_ID
 
 private fun formatAlarmTime(alarm: Alarm): String {
     return String.format("%02d:%02d", alarm.hour, alarm.minute)
@@ -68,20 +79,31 @@ private fun formatAlarmDays(daysOfWeek: List<Int>): String {
         }
     }
 }
-@OptIn(ExperimentalLayoutApi::class)
+
+private fun formatAlarmSound(alarm: Alarm, soundsById: Map<String, AlarmSound>): String {
+    val soundId = alarm.resolvedSoundId
+    return soundsById[soundId]?.name
+        ?: if (soundId == DEFAULT_ALARM_STABLE_ID) DEFAULT_ALARM_SOUND_NAME else "Missing sound"
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddAlarmDialog(
+    availableSounds: List<AlarmSound>,
     onDismiss: () -> Unit,
-    onConfirm: (hour: Int, minute: Int, label: String, soundId: Int, days: List<Int>, am: Boolean) -> Unit
+    onConfirm: (hour: Int, minute: Int, label: String, soundId: String, days: List<Int>, am: Boolean) -> Unit
 ) {
     var hour by remember { mutableStateOf("7") }
     var minute by remember { mutableStateOf("00") }
     var label by remember { mutableStateOf("") }
     var selectedDays by remember { mutableStateOf(setOf<Int>()) }
-    var selectedSoundId by remember { mutableIntStateOf(1) }
+    var selectedSoundId by remember { mutableStateOf(DEFAULT_ALARM_STABLE_ID) }
+    var soundMenuExpanded by remember { mutableStateOf(false) }
     var am by remember { mutableStateOf(true) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val dayLabels = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
+    val selectedSound = availableSounds.firstOrNull { it.stableId == selectedSoundId }
+        ?: availableSounds.firstOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -109,7 +131,6 @@ fun AddAlarmDialog(
                         ),
                         modifier = Modifier.weight(1f)
                     )
-                    // AM/PM toggle
                     TextButton(
                         onClick = { am = !am },
                         modifier = Modifier.align(Alignment.CenterVertically)
@@ -126,6 +147,34 @@ fun AddAlarmDialog(
                         onDone = { keyboardController?.hide() }
                     )
                 )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = selectedSound?.name ?: DEFAULT_ALARM_SOUND_NAME,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sound") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { soundMenuExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = soundMenuExpanded,
+                        onDismissRequest = { soundMenuExpanded = false }
+                    ) {
+                        availableSounds.forEach { sound ->
+                            DropdownMenuItem(
+                                text = { Text(sound.name) },
+                                onClick = {
+                                    selectedSoundId = sound.stableId
+                                    soundMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 Text("Repeat", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     dayLabels.forEach { (dayNum, dayName) ->
@@ -150,7 +199,7 @@ fun AddAlarmDialog(
                     hour.toIntOrNull() ?: 0,
                     minute.toIntOrNull() ?: 0,
                     label,
-                    selectedSoundId,
+                    selectedSound?.stableId ?: DEFAULT_ALARM_STABLE_ID,
                     selectedDays.toList(),
                     am
                 )
@@ -166,14 +215,44 @@ fun AddAlarmDialog(
     )
 }
 
+@Composable
+private fun DeleteAlarmConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete alarms") },
+        text = { Text("are you sure you want to delete these alarms?") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlarmScreen(
     navController: NavController,
-    viewModel: AlarmViewModel
+    alarmViewModel: AlarmViewModel
 ) {
-    val uiState by viewModel.alarmUiState.collectAsStateWithLifecycle()
-    var showDialog by remember { mutableStateOf(false) }
+    val app = LocalContext.current.applicationContext as AlarmClockApplication
+    val audioViewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(app.audioRepository))
+    val uiState by alarmViewModel.alarmUiState.collectAsStateWithLifecycle()
+    val soundUiState by audioViewModel.soundUiState.collectAsStateWithLifecycle()
+    val alarmList = uiState.alarms.values.sortedBy { it.alarmId }
+    val availableSounds = soundUiState.defaultSounds + soundUiState.customSounds
+    val soundsById = availableSounds.associateBy { it.stableId }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedAlarmIds by remember { mutableStateOf(setOf<Int>()) }
 
     Scaffold(
         topBar = {
@@ -198,47 +277,82 @@ fun AlarmScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDialog = true }
+                onClick = { showAddDialog = true }
             ) {
                 Icon(Icons.Default.AddCircle, contentDescription = "Add alarm")
             }
         }
     ) { innerPadding ->
-        val alarmList = uiState.alarms.values.sortedBy { it.alarmId }
-
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(innerPadding)
         ) {
-            items(alarmList, key = { it.alarmId }) { alarm ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp, horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = formatAlarmTime(alarm),
-                                style = MaterialTheme.typography.headlineSmall
-                            )
-                            if (alarm.label.isNotBlank()) {
-                                Text(text = alarm.label)
-                            }
-                            Text(
-                                text = formatAlarmDays(alarm.daysOfWeek),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        TextButton(
-                            onClick = { viewModel.setAlarmEnabled(alarm.alarmId, !alarm.isEnabled) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (selectedAlarmIds.isEmpty()) "Select alarms" else "${selectedAlarmIds.size} selected",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { showDeleteDialog = true },
+                    enabled = selectedAlarmIds.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete selected alarms")
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                items(alarmList, key = { it.alarmId }) { alarm ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp, horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (alarm.isEnabled) "Enabled" else "Disabled")
+                            Checkbox(
+                                checked = alarm.alarmId in selectedAlarmIds,
+                                onCheckedChange = { isChecked ->
+                                    selectedAlarmIds = if (isChecked) {
+                                        selectedAlarmIds + alarm.alarmId
+                                    } else {
+                                        selectedAlarmIds - alarm.alarmId
+                                    }
+                                }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = formatAlarmTime(alarm),
+                                    style = MaterialTheme.typography.headlineSmall
+                                )
+                                if (alarm.label.isNotBlank()) {
+                                    Text(text = alarm.label)
+                                }
+                                Text(
+                                    text = formatAlarmDays(alarm.daysOfWeek),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Sound: ${formatAlarmSound(alarm, soundsById)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            TextButton(
+                                onClick = { alarmViewModel.setAlarmEnabled(alarm.alarmId, !alarm.isEnabled) }
+                            ) {
+                                Text(if (alarm.isEnabled) "Enabled" else "Disabled")
+                            }
                         }
                     }
                 }
@@ -246,12 +360,24 @@ fun AlarmScreen(
         }
     }
 
-    if (showDialog) {
+    if (showDeleteDialog) {
+        DeleteAlarmConfirmationDialog(
+            onDismiss = { showDeleteDialog = false },
+            onConfirm = {
+                alarmViewModel.deleteAlarms(selectedAlarmIds)
+                selectedAlarmIds = emptySet()
+                showDeleteDialog = false
+            }
+        )
+    }
+
+    if (showAddDialog) {
         AddAlarmDialog(
-            onDismiss = { showDialog = false },
+            availableSounds = availableSounds,
+            onDismiss = { showAddDialog = false },
             onConfirm = { hour, minute, label, soundId, days, am ->
-                viewModel.addAlarm(hour, minute, label, soundId, days, am)
-                showDialog = false
+                alarmViewModel.addAlarm(hour, minute, label, soundId, days, am)
+                showAddDialog = false
             }
         )
     }

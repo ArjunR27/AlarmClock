@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dev.csse.ayranade.alarmclock.ui.audios.DEFAULT_ALARM_STABLE_ID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,10 +18,15 @@ data class Alarm(
     var second: Int = 0,
     val label: String = "",
     var isEnabled: Boolean = true,
+    var soundId: String? = null,
+    // Retained to migrate older saved alarms that used an ambiguous numeric ID.
     var alarmSoundId: Int? = null,
     var daysOfWeek: List<Int> = emptyList(),
     var am : Boolean = true,
-)
+) {
+    val resolvedSoundId: String
+        get() = soundId ?: DEFAULT_ALARM_STABLE_ID
+}
 
 data class AlarmUiState(
     val alarms: Map<Int, Alarm> = emptyMap()
@@ -41,8 +47,18 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
     init {
         viewModelScope.launch {
             AlarmStorage.loadAlarms(context).collect { alarms ->
-                if (alarms.isEmpty()) loadDefaultAlarms()
-                else _uiState.update { it.copy(alarms = alarms.associateBy { a -> a.alarmId })}
+                val normalizedAlarms = alarms.map { it.normalize() }
+
+                if (normalizedAlarms.isEmpty()) {
+                    loadDefaultAlarms()
+                } else {
+                    val alarmMap = normalizedAlarms.associateBy { alarm -> alarm.alarmId }
+                    _uiState.update { it.copy(alarms = alarmMap) }
+
+                    if (normalizedAlarms != alarms) {
+                        AlarmStorage.saveAlarms(context, alarmMap)
+                    }
+                }
             }
         }
     }
@@ -63,7 +79,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 hour = 6,
                 minute = 30,
                 label = "Weekday Run",
-                alarmSoundId = 1,
+                soundId = DEFAULT_ALARM_STABLE_ID,
                 daysOfWeek = listOf(1, 2, 3, 4, 5),
                 am = true
             ),
@@ -72,7 +88,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 hour = 8,
                 minute = 0,
                 label = "Standup",
-                alarmSoundId = 2,
+                soundId = DEFAULT_ALARM_STABLE_ID,
                 daysOfWeek = listOf(1, 2, 3, 4, 5),
                 am = true,
             ),
@@ -82,7 +98,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 minute = 15,
                 label = "Weekend Chores",
                 isEnabled = false,
-                alarmSoundId = 3,
+                soundId = DEFAULT_ALARM_STABLE_ID,
                 daysOfWeek = listOf(6),
                 am = false
             )
@@ -92,7 +108,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
         save()
     }
 
-    fun addAlarm(hour: Int, minute: Int, label: String, alarmSoundId: Int, daysOfWeek: List<Int>, am: Boolean) {
+    fun addAlarm(hour: Int, minute: Int, label: String, soundId: String, daysOfWeek: List<Int>, am: Boolean) {
         _uiState.update { state ->
             val alarmId = nextAlarmId(state)
             state.copy(
@@ -102,7 +118,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                         hour = hour,
                         minute = minute,
                         label = label,
-                        alarmSoundId = alarmSoundId,
+                        soundId = soundId,
                         daysOfWeek = daysOfWeek,
                         am = am
                     )
@@ -122,5 +138,23 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
 
     fun disableAlarm(alarmId: Int) {
         setAlarmEnabled(alarmId = alarmId, isEnabled = false)
+    }
+
+    fun deleteAlarms(alarmIds: Set<Int>) {
+        if (alarmIds.isEmpty()) return
+
+        _uiState.update { state ->
+            state.copy(alarms = state.alarms.filterKeys { it !in alarmIds })
+        }
+        save()
+    }
+}
+
+private fun Alarm.normalize(): Alarm {
+    val normalizedSoundId = soundId ?: DEFAULT_ALARM_STABLE_ID
+    return if (normalizedSoundId == soundId && alarmSoundId == null) {
+        this
+    } else {
+        copy(soundId = normalizedSoundId, alarmSoundId = null)
     }
 }

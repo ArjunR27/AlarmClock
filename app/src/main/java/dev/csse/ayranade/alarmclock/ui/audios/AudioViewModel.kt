@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 
 
 data class AlarmSound(
+    val stableId: String,
     val alarmSoundId: Int,
     val name: String,
     val fileUri: String,
@@ -49,13 +50,25 @@ interface AudioDao {
 
     @Delete
     suspend fun delete(sound: AlarmSoundEntity)
+
+    @Query("DELETE FROM sounds WHERE id IN (:soundIds)")
+    suspend fun deleteByIds(soundIds: List<Int>)
 }
 
-private var nextId = 1
-private fun getNextId() = nextId++
+private const val DEFAULT_NO_POLE_SOUND_ID = 1
+private const val DEFAULT_NOTIFICATION_SOUND_ID = 2
+private const val DEFAULT_ALARM_SOUND_ID = 3
+
+private const val DEFAULT_NO_POLE_STABLE_ID = "default:no_pole"
+private const val DEFAULT_NOTIFICATION_STABLE_ID = "default:notification"
+const val DEFAULT_ALARM_STABLE_ID = "default:alarm"
+const val DEFAULT_ALARM_SOUND_NAME = "Default Alarm Sound"
+
+private fun customStableSoundId(id: Int) = "custom:$id"
 
 private fun AlarmSoundEntity.toAlarmSound(): AlarmSound =
     AlarmSound(
+        stableId = customStableSoundId(id),
         alarmSoundId = id,
         name = name,
         fileUri = fileUri,
@@ -76,18 +89,21 @@ class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
     private fun loadDefaultSounds() {
         val defaults = listOf<AlarmSound>(
             AlarmSound(
-                alarmSoundId = getNextId(),
+                stableId = DEFAULT_NO_POLE_STABLE_ID,
+                alarmSoundId = DEFAULT_NO_POLE_SOUND_ID,
                 name = "No Pole - Don Toliver",
                 fileUri = soundPath + "no_pole"
             ),
             AlarmSound(
-                alarmSoundId = getNextId(),
+                stableId = DEFAULT_NOTIFICATION_STABLE_ID,
+                alarmSoundId = DEFAULT_NOTIFICATION_SOUND_ID,
                 name = "Notification Tone",
                 fileUri = Settings.System.DEFAULT_NOTIFICATION_URI.toString()
             ),
             AlarmSound(
-                alarmSoundId = getNextId(),
-                name = "Default Alarm   ",
+                stableId = DEFAULT_ALARM_STABLE_ID,
+                alarmSoundId = DEFAULT_ALARM_SOUND_ID,
+                name = DEFAULT_ALARM_SOUND_NAME,
                 fileUri = Settings.System.DEFAULT_ALARM_ALERT_URI.toString()
             )
         )
@@ -115,6 +131,15 @@ class AudioViewModel(private val repository: AudioRepository) : ViewModel() {
             repository.delete(sound)
         }
     }
+
+    fun deleteCustomSounds(soundIds: Set<Int>) {
+        if (soundIds.isEmpty()) return
+
+        viewModelScope.launch {
+            repository.deleteByIds(soundIds.toList())
+        }
+    }
+
     // Users can select a sound for an alarm
     fun selectSound(id: Int) {
         // Not implemented

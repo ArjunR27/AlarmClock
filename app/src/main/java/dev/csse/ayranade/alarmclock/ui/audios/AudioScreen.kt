@@ -1,26 +1,35 @@
 package dev.csse.ayranade.alarmclock.ui.audios
 
-
 import android.content.Context
 import android.content.Intent
-import androidx.compose.material3.AlertDialog
 import android.media.MediaPlayer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,24 +42,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import dev.csse.ayranade.alarmclock.AlarmClockApplication
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
 
-// Not implemented
 @Preview
 @Composable
 fun AudioScreenPreview() {
@@ -116,6 +118,28 @@ fun AudioAddDialog(
     )
 }
 
+@Composable
+private fun DeleteSoundConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete sounds") },
+        text = { Text("are you sure you want to delete these sounds?") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScreen(
@@ -126,7 +150,9 @@ fun AudioScreen(
     val uiState by viewModel.soundUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var currentPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var showDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedCustomSoundIds by remember { mutableStateOf(setOf<Int>()) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -158,45 +184,48 @@ fun AudioScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDialog = true }
+                onClick = { showAddDialog = true }
             ) {
-                Icon(Icons.Default.AddCircle, contentDescription = "Add")
+                Icon(Icons.Default.AddCircle, contentDescription = "Add sound")
             }
         }
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(innerPadding)
         ) {
-            item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Default sounds",
-                    modifier = Modifier.fillMaxWidth()
+                    text = if (selectedCustomSoundIds.isEmpty()) "Select custom sounds" else "${selectedCustomSoundIds.size} selected"
                 )
-            }
-            items(uiState.defaultSounds) { sound ->
-                SoundCard(
-                    sound = sound,
-                    context = context,
-                    currentPlayer = currentPlayer,
-                    onPlayerChange = { currentPlayer = it }
-                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { showDeleteDialog = true },
+                    enabled = selectedCustomSoundIds.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete selected sounds")
+                }
             }
 
-            if (uiState.customSounds.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 item {
                     Text(
-                        text = "Custom sounds",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
+                        text = "Default Sounds",
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                items(uiState.customSounds) { sound ->
+                items(uiState.defaultSounds, key = { it.stableId }) { sound ->
                     SoundCard(
                         sound = sound,
                         context = context,
@@ -204,18 +233,59 @@ fun AudioScreen(
                         onPlayerChange = { currentPlayer = it }
                     )
                 }
+
+                if (uiState.customSounds.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Custom Sounds",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                    }
+                    items(uiState.customSounds, key = { it.stableId }) { sound ->
+                        SoundCard(
+                            sound = sound,
+                            context = context,
+                            currentPlayer = currentPlayer,
+                            onPlayerChange = { currentPlayer = it },
+                            showSelector = true,
+                            isSelected = sound.alarmSoundId in selectedCustomSoundIds,
+                            onSelectionChange = { isChecked ->
+                                selectedCustomSoundIds = if (isChecked) {
+                                    selectedCustomSoundIds + sound.alarmSoundId
+                                } else {
+                                    selectedCustomSoundIds - sound.alarmSoundId
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
+    }
 
-        if (showDialog) {
-            AudioAddDialog(
-                onDismiss = { showDialog = false },
-                onConfirm = { name, fileUri, isCustom ->
-                    viewModel.addCustomSound(name = name, uri = fileUri)
-                    showDialog = false
-                }
-            )
-        }
+    if (showDeleteDialog) {
+        DeleteSoundConfirmationDialog(
+            onDismiss = { showDeleteDialog = false },
+            onConfirm = {
+                currentPlayer?.release()
+                currentPlayer = null
+                viewModel.deleteCustomSounds(selectedCustomSoundIds)
+                selectedCustomSoundIds = emptySet()
+                showDeleteDialog = false
+            }
+        )
+    }
+
+    if (showAddDialog) {
+        AudioAddDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, fileUri, _ ->
+                viewModel.addCustomSound(name = name, uri = fileUri)
+                showAddDialog = false
+            }
+        )
     }
 }
 
@@ -224,7 +294,10 @@ private fun SoundCard(
     sound: AlarmSound,
     context: Context,
     currentPlayer: MediaPlayer?,
-    onPlayerChange: (MediaPlayer?) -> Unit
+    onPlayerChange: (MediaPlayer?) -> Unit,
+    showSelector: Boolean = false,
+    isSelected: Boolean = false,
+    onSelectionChange: (Boolean) -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -235,6 +308,12 @@ private fun SoundCard(
                 .padding(vertical = 20.dp, horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (showSelector) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { isChecked -> onSelectionChange(isChecked) }
+                )
+            }
             Text(
                 text = sound.name,
                 modifier = Modifier.weight(1f)
