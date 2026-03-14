@@ -44,7 +44,11 @@ class AlarmPlaybackService : Service() {
 
                 startForeground(
                     ALARM_NOTIFICATION_ID,
-                    buildNotification(alarmId = alarmId, title = "Alarm ringing")
+                    buildNotification(
+                        alarmId = alarmId,
+                        title = "Alarm ringing",
+                        snoozeMinutes = DEFAULT_SNOOZE_MINUTES
+                    )
                 )
 
                 serviceScope.launch {
@@ -62,9 +66,18 @@ class AlarmPlaybackService : Service() {
             ACTION_SNOOZE_ALARM -> {
                 val alarmId = intent.getIntExtra(EXTRA_ALARM_ID, currentAlarmId ?: -1)
                 if (alarmId != -1) {
-                    AlarmScheduler.scheduleSnooze(applicationContext, alarmId)
+                    serviceScope.launch {
+                        val alarm = AlarmStorage.loadAlarmMap(applicationContext)[alarmId]
+                        AlarmScheduler.scheduleSnooze(
+                            applicationContext,
+                            alarmId,
+                            alarm?.snoozeMinutes ?: DEFAULT_SNOOZE_MINUTES
+                        )
+                        stopRinging()
+                    }
+                } else {
+                    stopRinging()
                 }
-                stopRinging()
             }
         }
 
@@ -102,7 +115,11 @@ class AlarmPlaybackService : Service() {
             ?: resolveAlarmSound(applicationContext, DEFAULT_ALARM_STABLE_ID)
         val title = alarm.label.ifBlank { "Alarm" }
 
-        val notification = buildNotification(alarmId = alarmId, title = title)
+        val notification = buildNotification(
+            alarmId = alarmId,
+            title = title,
+            snoozeMinutes = alarm.snoozeMinutes
+        )
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(ALARM_NOTIFICATION_ID, notification)
 
@@ -157,7 +174,11 @@ class AlarmPlaybackService : Service() {
         currentPlayer = null
     }
 
-    private fun buildNotification(alarmId: Int, title: String) =
+    private fun buildNotification(
+        alarmId: Int,
+        title: String,
+        snoozeMinutes: Int
+    ) =
         NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -178,7 +199,7 @@ class AlarmPlaybackService : Service() {
             )
             .addAction(
                 0,
-                "Snooze",
+                "Snooze ${formatSnoozeMinutes(snoozeMinutes)}",
                 AlarmScheduler.buildServiceActionPendingIntent(this, ACTION_SNOOZE_ALARM, alarmId)
             )
             .build()

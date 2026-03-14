@@ -20,7 +20,6 @@ internal const val ACTION_DISMISS_ALARM = "dev.csse.ayranade.alarmclock.action.D
 internal const val ACTION_SNOOZE_ALARM = "dev.csse.ayranade.alarmclock.action.SNOOZE_ALARM"
 internal const val ACTION_ALARM_STOPPED = "dev.csse.ayranade.alarmclock.action.ALARM_STOPPED"
 
-private const val SNOOZE_MINUTES = 5L
 private const val SNOOZE_REQUEST_CODE_OFFSET = 100_000
 
 object AlarmScheduler {
@@ -56,12 +55,13 @@ object AlarmScheduler {
         return true
     }
 
-    fun scheduleSnooze(context: Context, alarmId: Int): Boolean {
+    fun scheduleSnooze(context: Context, alarmId: Int, snoozeMinutes: Int): Boolean {
         if (!canScheduleExactAlarms(context)) {
             return false
         }
 
-        val triggerAtMillis = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L
+        val triggerAtMillis =
+            System.currentTimeMillis() + normalizeSnoozeMinutes(snoozeMinutes) * 60_000L
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val showIntent = buildAlarmContentPendingIntent(context, alarmId)
         val fireIntent = buildAlarmPendingIntent(context, alarmId, isSnooze = true)

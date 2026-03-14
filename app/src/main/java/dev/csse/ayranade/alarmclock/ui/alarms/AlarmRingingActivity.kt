@@ -164,7 +164,7 @@ private fun AlarmRingingScreen(
             onClick = onSnooze,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Snooze 5 min")
+            Text("Snooze ${formatSnoozeMinutes(alarm?.snoozeMinutes ?: DEFAULT_SNOOZE_MINUTES)}")
         }
     }
 }

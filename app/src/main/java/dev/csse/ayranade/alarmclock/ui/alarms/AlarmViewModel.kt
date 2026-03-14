@@ -23,6 +23,7 @@ data class Alarm(
     var alarmSoundId: Int? = null,
     var daysOfWeek: List<Int> = emptyList(),
     var am : Boolean = true,
+    var snoozeMinutes: Int = DEFAULT_SNOOZE_MINUTES,
 ) {
     val resolvedSoundId: String
         get() = soundId ?: DEFAULT_ALARM_STABLE_ID
@@ -118,6 +119,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
         soundId: String,
         daysOfWeek: List<Int>,
         am: Boolean,
+        snoozeMinutes: Int,
         isEnabled: Boolean = true
     ) {
         viewModelScope.launch {
@@ -131,6 +133,7 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 soundId = soundId,
                 daysOfWeek = daysOfWeek,
                 am = am,
+                snoozeMinutes = normalizeSnoozeMinutes(snoozeMinutes),
                 isEnabled = isEnabled
             )
             val updatedAlarms = state.alarms + (alarmId to newAlarm)
@@ -141,6 +144,39 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
                 AlarmScheduler.scheduleAlarm(context, newAlarm)
             } else {
                 AlarmScheduler.cancelAlarm(context, newAlarm.alarmId)
+            }
+        }
+    }
+
+    fun updateAlarm(
+        alarmId: Int,
+        hour: Int,
+        minute: Int,
+        label: String,
+        soundId: String,
+        daysOfWeek: List<Int>,
+        am: Boolean,
+        snoozeMinutes: Int
+    ) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val existingAlarm = state.alarms[alarmId] ?: return@launch
+            val updatedAlarm = existingAlarm.copy(
+                hour = hour,
+                minute = minute,
+                label = label,
+                soundId = soundId,
+                daysOfWeek = daysOfWeek,
+                am = am,
+                snoozeMinutes = normalizeSnoozeMinutes(snoozeMinutes)
+            )
+            val updatedAlarms = state.alarms + (alarmId to updatedAlarm)
+            _uiState.value = state.copy(alarms = updatedAlarms)
+            AlarmStorage.saveAlarms(context, updatedAlarms)
+
+            AlarmScheduler.cancelAlarm(context, alarmId)
+            if (updatedAlarm.isEnabled) {
+                AlarmScheduler.scheduleAlarm(context, updatedAlarm)
             }
         }
     }

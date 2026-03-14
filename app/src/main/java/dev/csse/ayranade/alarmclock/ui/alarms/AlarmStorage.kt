@@ -39,9 +39,18 @@ object AlarmStorage {
 
 internal fun Alarm.normalized(): Alarm {
     val normalizedSoundId = soundId ?: DEFAULT_ALARM_STABLE_ID
-    return if (normalizedSoundId == soundId && alarmSoundId == null) {
+    val normalizedSnoozeMinutes = normalizeSnoozeMinutes(snoozeMinutes)
+    return if (
+        normalizedSoundId == soundId &&
+        alarmSoundId == null &&
+        normalizedSnoozeMinutes == snoozeMinutes
+    ) {
         this
     } else {
-        copy(soundId = normalizedSoundId, alarmSoundId = null)
+        copy(
+            soundId = normalizedSoundId,
+            alarmSoundId = null,
+            snoozeMinutes = normalizedSnoozeMinutes
+        )
     }
 }

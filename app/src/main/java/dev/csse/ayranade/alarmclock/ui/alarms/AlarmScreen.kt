@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -126,18 +127,40 @@ private fun notificationSettingsIntent(context: Context): Intent =
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun AddAlarmDialog(
+private fun AlarmEditorDialog(
     availableSounds: List<AlarmSound>,
+    initialAlarm: Alarm? = null,
     onDismiss: () -> Unit,
-    onConfirm: (hour: Int, minute: Int, label: String, soundId: String, days: List<Int>, am: Boolean) -> Unit
+    onConfirm: (
+        hour: Int,
+        minute: Int,
+        label: String,
+        soundId: String,
+        days: List<Int>,
+        am: Boolean,
+        snoozeMinutes: Int
+    ) -> Unit
 ) {
-    var hour by remember { mutableStateOf("7") }
-    var minute by remember { mutableStateOf("00") }
-    var label by remember { mutableStateOf("") }
-    var selectedDays by remember { mutableStateOf(setOf<Int>()) }
-    var selectedSoundId by remember { mutableStateOf(DEFAULT_ALARM_STABLE_ID) }
+    val dialogKey = initialAlarm?.alarmId
+    var hour by remember(dialogKey) { mutableStateOf((initialAlarm?.hour ?: 7).toString()) }
+    var minute by remember(dialogKey) {
+        mutableStateOf(String.format("%02d", initialAlarm?.minute ?: 0))
+    }
+    var label by remember(dialogKey) { mutableStateOf(initialAlarm?.label.orEmpty()) }
+    var selectedDays by remember(dialogKey) {
+        mutableStateOf(initialAlarm?.daysOfWeek?.toSet() ?: emptySet())
+    }
+    var selectedSoundId by remember(dialogKey) {
+        mutableStateOf(initialAlarm?.resolvedSoundId ?: DEFAULT_ALARM_STABLE_ID)
+    }
     var soundMenuExpanded by remember { mutableStateOf(false) }
-    var am by remember { mutableStateOf(true) }
+    var snoozeMenuExpanded by remember { mutableStateOf(false) }
+    var am by remember(dialogKey) { mutableStateOf(initialAlarm?.am ?: true) }
+    var selectedSnoozeMinutes by remember(dialogKey) {
+        mutableStateOf(
+            normalizeSnoozeMinutes(initialAlarm?.snoozeMinutes ?: DEFAULT_SNOOZE_MINUTES)
+        )
+    }
     val keyboardController = LocalSoftwareKeyboardController.current
     val dayLabels = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
     val selectedSound = availableSounds.firstOrNull { it.stableId == selectedSoundId }
@@ -145,7 +168,7 @@ fun AddAlarmDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Alarm") },
+        title = { Text(if (initialAlarm == null) "New Alarm" else "Edit Alarm") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -213,6 +236,34 @@ fun AddAlarmDialog(
                         }
                     }
                 }
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = formatSnoozeMinutes(selectedSnoozeMinutes),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Snooze") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { snoozeMenuExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = snoozeMenuExpanded,
+                        onDismissRequest = { snoozeMenuExpanded = false }
+                    ) {
+                        SNOOZE_MINUTE_OPTIONS.forEach { snoozeMinutes ->
+                            DropdownMenuItem(
+                                text = { Text(formatSnoozeMinutes(snoozeMinutes)) },
+                                onClick = {
+                                    selectedSnoozeMinutes = snoozeMinutes
+                                    snoozeMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 Text("Repeat", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     dayLabels.forEach { (dayNum, dayName) ->
@@ -239,7 +290,8 @@ fun AddAlarmDialog(
                     label,
                     selectedSound?.stableId ?: DEFAULT_ALARM_STABLE_ID,
                     selectedDays.toList(),
-                    am
+                    am,
+                    selectedSnoozeMinutes
                 )
             }) {
                 Text("Save")
@@ -367,9 +419,11 @@ fun AlarmScreen(
     val notificationsEnabled = hasNotificationAccess(context)
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var editingAlarmId by remember { mutableStateOf<Int?>(null) }
     var showExactAlarmPermissionDialog by remember { mutableStateOf(false) }
     var showNotificationPermissionDialog by remember { mutableStateOf(false) }
     var selectedAlarmIds by remember { mutableStateOf(setOf<Int>()) }
+    val editingAlarm = editingAlarmId?.let(uiState.alarms::get)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -489,6 +543,13 @@ fun AlarmScreen(
                                     text = "Sound: ${formatAlarmSound(alarm, soundsById)}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
+                                Text(
+                                    text = "Snooze: ${formatSnoozeMinutes(alarm.snoozeMinutes)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            IconButton(onClick = { editingAlarmId = alarm.alarmId }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit alarm")
                             }
                             TextButton(
                                 onClick = {
@@ -523,10 +584,10 @@ fun AlarmScreen(
     }
 
     if (showAddDialog) {
-        AddAlarmDialog(
+        AlarmEditorDialog(
             availableSounds = availableSounds,
             onDismiss = { showAddDialog = false },
-            onConfirm = { hour, minute, label, soundId, days, am ->
+            onConfirm = { hour, minute, label, soundId, days, am, snoozeMinutes ->
                 val canSchedule = AlarmScheduler.canScheduleExactAlarms(context)
                 alarmViewModel.addAlarm(
                     hour = hour,
@@ -535,6 +596,7 @@ fun AlarmScreen(
                     soundId = soundId,
                     daysOfWeek = days,
                     am = am,
+                    snoozeMinutes = snoozeMinutes,
                     isEnabled = canSchedule
                 )
                 showAddDialog = false
@@ -542,6 +604,35 @@ fun AlarmScreen(
                     showExactAlarmPermissionDialog = true
                 } else {
                     requestNotificationAccess()
+                }
+            }
+        )
+    }
+
+    if (editingAlarm != null) {
+        AlarmEditorDialog(
+            availableSounds = availableSounds,
+            initialAlarm = editingAlarm,
+            onDismiss = { editingAlarmId = null },
+            onConfirm = { hour, minute, label, soundId, days, am, snoozeMinutes ->
+                val canSchedule = AlarmScheduler.canScheduleExactAlarms(context)
+                alarmViewModel.updateAlarm(
+                    alarmId = editingAlarm.alarmId,
+                    hour = hour,
+                    minute = minute,
+                    label = label,
+                    soundId = soundId,
+                    daysOfWeek = days,
+                    am = am,
+                    snoozeMinutes = snoozeMinutes
+                )
+                editingAlarmId = null
+                if (editingAlarm.isEnabled) {
+                    if (!canSchedule && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        showExactAlarmPermissionDialog = true
+                    } else {
+                        requestNotificationAccess()
+                    }
                 }
             }
         )
