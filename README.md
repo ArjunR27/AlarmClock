@@ -122,3 +122,19 @@ Declared permissions used by the project:
 
 ## Device/Emulator Testing
 - Consistently tested on Pixel 6
+- There is a song called No-Pole that is default included bundled with the app
+  - This song demonstrated the custom song upload
+
+- To upload a custom song (device):
+  - Please find a viable mp3/audio file (I used https://ytmp3.gs/)
+  - This can convert any youtube video to an audio
+  - Then upload the audio to the Downloads folder
+  
+- To upload a custom song (emulator):
+- Please find a viable mp3/audio file (I used https://ytmp3.gs/)
+- This can convert any youtube video to an audio
+- Then upload the audio to the Downloads folder
+  - You can acess this folder on the emulator via using Device Explorer in Device Manager
+  - Go to the 'storage/emulated/0/Downloads' folder
+  - Move your downloaded audio file to that folder
+- The audio should now be visible to in the app
