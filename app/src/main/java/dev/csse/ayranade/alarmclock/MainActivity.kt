@@ -37,8 +37,8 @@ class MainActivity : ComponentActivity() {
 private fun AlarmClockApp(alarmViewModel: AlarmViewModel) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "clock") {
-        composable("clock") { ClockScreen(navController) }
-        composable("alarms") { AlarmScreen(navController, alarmViewModel) }  // pass it in
+        composable("clock") { ClockScreen(navController, alarmViewModel) }
+        composable("alarms") { AlarmScreen(navController, alarmViewModel) }
         composable("sounds") { AudioScreen(navController) }
     }
 }
