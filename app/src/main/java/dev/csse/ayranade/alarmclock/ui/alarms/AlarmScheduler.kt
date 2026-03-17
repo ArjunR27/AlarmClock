@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import java.time.ZoneId
 import java.time.ZonedDateTime
 
 internal const val ALARM_CHANNEL_ID = "alarm_ringing_silent"
@@ -43,7 +42,7 @@ object AlarmScheduler {
             return false
         }
 
-        val triggerAtMillis = computeNextTriggerAtMillis(alarm) ?: return false
+        val triggerAtMillis = alarm.nextTriggerAtMillis(ZonedDateTime.now()) ?: return false
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val showIntent = buildAlarmContentPendingIntent(context, alarm.alarmId)
         val fireIntent = buildAlarmPendingIntent(context, alarm.alarmId, isSnooze = false)
@@ -147,57 +146,4 @@ object AlarmScheduler {
         } else {
             alarmId
         }
-
-    private fun computeNextTriggerAtMillis(alarm: Alarm): Long? {
-        val zoneId = ZoneId.systemDefault()
-        val now = ZonedDateTime.now(zoneId)
-        val targetHour = to24Hour(alarm.hour, alarm.am)
-
-        if (alarm.daysOfWeek.isEmpty()) {
-            var candidate = now
-                .withHour(targetHour)
-                .withMinute(alarm.minute.coerceIn(0, 59))
-                .withSecond(0)
-                .withNano(0)
-
-            if (!candidate.isAfter(now)) {
-                candidate = candidate.plusDays(1)
-            }
-
-            return candidate.toInstant().toEpochMilli()
-        }
-
-        val selectedDays = alarm.daysOfWeek.toSet()
-        for (dayOffset in 0..7) {
-            val candidateDate = now.toLocalDate().plusDays(dayOffset.toLong())
-            if (candidateDate.dayOfWeek.value !in selectedDays) {
-                continue
-            }
-
-            val candidate = candidateDate
-                .atTime(targetHour, alarm.minute.coerceIn(0, 59))
-                .atZone(zoneId)
-
-            if (candidate.isAfter(now)) {
-                return candidate.toInstant().toEpochMilli()
-            }
-        }
-
-        return null
-    }
-
-    private fun to24Hour(hour: Int, am: Boolean): Int {
-        val normalizedHour = when {
-            hour <= 0 -> 12
-            hour > 12 -> hour % 12
-            else -> hour
-        }
-
-        return when {
-            am && normalizedHour == 12 -> 0
-            !am && normalizedHour == 12 -> 12
-            am -> normalizedHour
-            else -> normalizedHour + 12
-        }
-    }
 }
