@@ -187,6 +187,8 @@ class AlarmPlaybackService : Service() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
             .setFullScreenIntent(
                 AlarmScheduler.buildAlarmContentPendingIntent(this, alarmId),
                 true
@@ -216,6 +218,8 @@ class AlarmPlaybackService : Service() {
         ).apply {
             description = "Foreground notifications for active alarms"
             lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            setSound(null, null)
+            enableVibration(false)
         }
 
         val notificationManager = getSystemService(NotificationManager::class.java)

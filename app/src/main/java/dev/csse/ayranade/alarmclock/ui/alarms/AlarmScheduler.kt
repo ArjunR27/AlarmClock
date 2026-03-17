@@ -10,7 +10,7 @@ import android.provider.Settings
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-internal const val ALARM_CHANNEL_ID = "alarm_ringing"
+internal const val ALARM_CHANNEL_ID = "alarm_ringing_silent"
 internal const val ALARM_NOTIFICATION_ID = 4001
 internal const val EXTRA_ALARM_ID = "extra_alarm_id"
 internal const val EXTRA_IS_SNOOZE = "extra_is_snooze"
