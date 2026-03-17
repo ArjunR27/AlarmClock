@@ -1,4 +1,4 @@
-# AlarmClock
+# Tempo
 
 Tempo is a Jetpack Compose Android app that combines a live analog clock, 
 an alarm management system, and a custom sound library in one, unified interface. 
