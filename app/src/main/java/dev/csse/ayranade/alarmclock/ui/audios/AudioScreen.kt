@@ -10,21 +10,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MusicNote
@@ -32,21 +39,22 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +64,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
@@ -63,27 +72,27 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
 import dev.csse.ayranade.alarmclock.AlarmClockApplication
 import kotlin.random.Random
 
 @Preview
 @Composable
 fun AudioScreenPreview() {
-    AudioScreen(navController = rememberNavController())
+    AudioScreen(contentPadding = PaddingValues())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioAddDialog(
+private fun AudioAddSheet(
     onDismiss: () -> Unit,
     onConfirm: (name: String, fileUri: String, isCustom: Boolean) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var fileUri by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var fileUri by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -102,35 +111,73 @@ fun AudioAddDialog(
         }
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Add Sound") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
-                )
-                TextButton(onClick = { filePicker.launch(arrayOf("audio/*")) }) {
-                    Text(if (fileUri.isBlank()) "Choose file..." else "File chosen")
+        sheetState = sheetState,
+        sheetMaxWidth = 560.dp
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+        ) {
+            val maxSheetHeight = if (maxWidth > maxHeight) maxHeight * 0.84f else maxHeight * 0.92f
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 560.dp)
+                        .heightIn(max = maxSheetHeight)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Add Sound",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel")
+                        }
+                        TextButton(
+                            onClick = { onConfirm(name, fileUri, true) },
+                            enabled = name.isNotBlank() && fileUri.isNotBlank()
+                        ) {
+                            Text("Save")
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Name") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                            }
+                        )
+                    )
+                    TextButton(onClick = { filePicker.launch(arrayOf("audio/*")) }) {
+                        Text(if (fileUri.isBlank()) "Choose file..." else "File chosen")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name, fileUri, true) },
-                enabled = name.isNotBlank() && fileUri.isNotBlank()
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @Composable
@@ -155,19 +202,18 @@ private fun DeleteSoundConfirmationDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScreen(
-    navController: NavController,
+    contentPadding: PaddingValues,
 ) {
     val app = LocalContext.current.applicationContext as AlarmClockApplication
     val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(app.audioRepository))
     val uiState by viewModel.soundUiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var currentPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var selectedCustomSoundIds by remember { mutableStateOf(setOf<Int>()) }
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedCustomSoundIds by rememberSaveable { mutableStateOf(listOf<Int>()) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -176,111 +222,88 @@ fun AudioScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        TextButton(
-                            onClick = { navController.navigate("clock") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Clock") }
-                        TextButton(
-                            onClick = { navController.navigate("alarms") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Alarms") }
-                        TextButton(
-                            onClick = { navController.navigate("sounds") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Sounds") }
-                    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (selectedCustomSoundIds.isEmpty()) {
+                    "Select Custom Sounds"
+                } else {
+                    "${selectedCustomSoundIds.size} selected"
                 }
             )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(
+                onClick = { showDeleteDialog = true },
+                enabled = selectedCustomSoundIds.isNotEmpty()
             ) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete selected sounds")
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            item {
                 Text(
-                    text = if (selectedCustomSoundIds.isEmpty()) {
-                        "Select Custom Sounds"
-                    } else {
-                        "${selectedCustomSoundIds.size} selected"
-                    }
+                    text = "Default Sounds",
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.titleMedium
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { showDeleteDialog = true },
-                    enabled = selectedCustomSoundIds.isNotEmpty()
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete selected sounds")
-                }
+            }
+            items(uiState.defaultSounds, key = { it.stableId }) { sound ->
+                SoundCard(
+                    sound = sound,
+                    context = context,
+                    currentPlayer = currentPlayer,
+                    onPlayerChange = { currentPlayer = it }
+                )
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            if (uiState.customSounds.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Default Sounds",
-                        modifier = Modifier.fillMaxWidth(),
+                        text = "Custom Sounds",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-                items(uiState.defaultSounds, key = { it.stableId }) { sound ->
+                items(uiState.customSounds, key = { it.stableId }) { sound ->
                     SoundCard(
                         sound = sound,
                         context = context,
                         currentPlayer = currentPlayer,
-                        onPlayerChange = { currentPlayer = it }
-                    )
-                }
-
-                if (uiState.customSounds.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Custom Sounds",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    items(uiState.customSounds, key = { it.stableId }) { sound ->
-                        SoundCard(
-                            sound = sound,
-                            context = context,
-                            currentPlayer = currentPlayer,
-                            onPlayerChange = { currentPlayer = it },
-                            showSelector = true,
-                            isSelected = sound.alarmSoundId in selectedCustomSoundIds,
-                            onSelectionChange = { isChecked ->
-                                selectedCustomSoundIds = if (isChecked) {
-                                    selectedCustomSoundIds + sound.alarmSoundId
-                                } else {
-                                    selectedCustomSoundIds - sound.alarmSoundId
-                                }
+                        onPlayerChange = { currentPlayer = it },
+                        showSelector = true,
+                        isSelected = sound.alarmSoundId in selectedCustomSoundIds,
+                        onSelectionChange = { isChecked ->
+                            selectedCustomSoundIds = if (isChecked) {
+                                (selectedCustomSoundIds + sound.alarmSoundId).distinct()
+                            } else {
+                                selectedCustomSoundIds - sound.alarmSoundId
                             }
-                        )
-                    }
-                }
-
-                item {
-                    AddSoundInlineButton(
-                        onClick = { showAddDialog = true }
+                        }
                     )
                 }
+            }
+
+            item {
+                AddSoundInlineButton(
+                    onClick = { showAddDialog = true }
+                )
             }
         }
     }
@@ -291,15 +314,15 @@ fun AudioScreen(
             onConfirm = {
                 currentPlayer?.release()
                 currentPlayer = null
-                viewModel.deleteCustomSounds(selectedCustomSoundIds)
-                selectedCustomSoundIds = emptySet()
+                viewModel.deleteCustomSounds(selectedCustomSoundIds.toSet())
+                selectedCustomSoundIds = emptyList()
                 showDeleteDialog = false
             }
         )
     }
 
     if (showAddDialog) {
-        AudioAddDialog(
+        AudioAddSheet(
             onDismiss = { showAddDialog = false },
             onConfirm = { name, fileUri, _ ->
                 viewModel.addCustomSound(name = name, uri = fileUri)

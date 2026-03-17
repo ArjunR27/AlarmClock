@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -22,14 +23,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Check
@@ -38,7 +45,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -49,23 +55,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -77,7 +85,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import dev.csse.ayranade.alarmclock.AlarmClockApplication
 import dev.csse.ayranade.alarmclock.ui.audios.AlarmSound
 import dev.csse.ayranade.alarmclock.ui.audios.AudioViewModel
@@ -147,7 +154,7 @@ private fun notificationSettingsIntent(context: Context): Intent =
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun AlarmEditorDialog(
+private fun AlarmEditorSheet(
     availableSounds: List<AlarmSound>,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -160,146 +167,192 @@ private fun AlarmEditorDialog(
         snoozeMinutes: Int
     ) -> Unit
 ) {
-    var hour by remember { mutableStateOf("7") }
-    var minute by remember { mutableStateOf("00") }
-    var label by remember { mutableStateOf("") }
-    var selectedDays by remember { mutableStateOf(emptySet<Int>()) }
-    var selectedSoundId by remember { mutableStateOf(DEFAULT_ALARM_STABLE_ID) }
+    var hour by rememberSaveable { mutableStateOf("7") }
+    var minute by rememberSaveable { mutableStateOf("00") }
+    var label by rememberSaveable { mutableStateOf("") }
+    var selectedDays by rememberSaveable { mutableStateOf(emptyList<Int>()) }
+    var selectedSoundId by rememberSaveable { mutableStateOf(DEFAULT_ALARM_STABLE_ID) }
     var soundMenuExpanded by remember { mutableStateOf(false) }
-    var am by remember { mutableStateOf(true) }
-    var snoozeMinutesText by remember { mutableStateOf(DEFAULT_SNOOZE_MINUTES.toString()) }
+    var am by rememberSaveable { mutableStateOf(true) }
+    var snoozeMinutesText by rememberSaveable { mutableStateOf(DEFAULT_SNOOZE_MINUTES.toString()) }
+    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val selectedSound = availableSounds.firstOrNull { it.stableId == selectedSoundId }
         ?: availableSounds.firstOrNull()
     val parsedSnoozeMinutes = parseSnoozeMinutes(snoozeMinutesText)
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("New Alarm") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = hour,
-                        onValueChange = { if (it.length <= 2) hour = it },
-                        label = { Text("Hour") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = minute,
-                        onValueChange = { if (it.length <= 2) minute = it },
-                        label = { Text("Minute") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = { am = !am },
-                        modifier = Modifier.align(Alignment.CenterVertically)
+        sheetState = sheetState,
+        sheetMaxWidth = 640.dp
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+        ) {
+            val maxSheetHeight = if (maxWidth > maxHeight) maxHeight * 0.86f else maxHeight * 0.94f
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 640.dp)
+                        .heightIn(max = maxSheetHeight)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(if (am) "AM" else "PM")
+                        Text(
+                            text = "New Alarm",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel")
+                        }
+                        TextButton(
+                            onClick = {
+                                onConfirm(
+                                    hour.toIntOrNull() ?: 0,
+                                    minute.toIntOrNull() ?: 0,
+                                    label,
+                                    selectedSound?.stableId ?: DEFAULT_ALARM_STABLE_ID,
+                                    selectedDays,
+                                    am,
+                                    parsedSnoozeMinutes ?: DEFAULT_SNOOZE_MINUTES
+                                )
+                            },
+                            enabled = parsedSnoozeMinutes != null
+                        ) {
+                            Text("Save")
+                        }
                     }
-                }
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    label = { Text("Label") },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
-                )
-                Box(modifier = Modifier.fillMaxWidth()) {
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = hour,
+                            onValueChange = { if (it.length <= 2) hour = it },
+                            label = { Text("Hour") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = minute,
+                            onValueChange = { if (it.length <= 2) minute = it },
+                            label = { Text("Minute") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { am = !am },
+                            modifier = Modifier.align(Alignment.CenterVertically)
+                        ) {
+                            Text(if (am) "AM" else "PM")
+                        }
+                    }
                     OutlinedTextField(
-                        value = selectedSound?.name ?: DEFAULT_ALARM_SOUND_NAME,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Sound") },
-                        modifier = Modifier.fillMaxWidth()
+                        value = label,
+                        onValueChange = { label = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Label") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                            }
+                        )
                     )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clickable { soundMenuExpanded = true }
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = selectedSound?.name ?: DEFAULT_ALARM_SOUND_NAME,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Sound") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { soundMenuExpanded = true }
+                        )
+                        DropdownMenu(
+                            expanded = soundMenuExpanded,
+                            onDismissRequest = { soundMenuExpanded = false }
+                        ) {
+                            availableSounds.forEach { sound ->
+                                DropdownMenuItem(
+                                    text = { Text(sound.name) },
+                                    onClick = {
+                                        selectedSoundId = sound.stableId
+                                        soundMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = snoozeMinutesText,
+                        onValueChange = {
+                            snoozeMinutesText = it.filter(Char::isDigit).take(3)
+                        },
+                        label = { Text("Snooze (minutes)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = parsedSnoozeMinutes == null,
+                        supportingText = {
+                            Text("Enter $MIN_SNOOZE_MINUTES-$MAX_SNOOZE_MINUTES minutes")
+                        }
                     )
-                    DropdownMenu(
-                        expanded = soundMenuExpanded,
-                        onDismissRequest = { soundMenuExpanded = false }
-                    ) {
-                        availableSounds.forEach { sound ->
-                            DropdownMenuItem(
-                                text = { Text(sound.name) },
+                    Text("Repeat", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        alarmDayLabels.forEach { (dayNum, dayName) ->
+                            DayToggleChip(
+                                label = dayName.take(1),
+                                isSelected = dayNum in selectedDays,
                                 onClick = {
-                                    selectedSoundId = sound.stableId
-                                    soundMenuExpanded = false
+                                    selectedDays = if (dayNum in selectedDays) {
+                                        selectedDays - dayNum
+                                    } else {
+                                        (selectedDays + dayNum).sorted()
+                                    }
                                 }
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.size(8.dp))
                 }
-                OutlinedTextField(
-                    value = snoozeMinutesText,
-                    onValueChange = {
-                        snoozeMinutesText = it.filter(Char::isDigit).take(3)
-                    },
-                    label = { Text("Snooze (minutes)") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = parsedSnoozeMinutes == null,
-                    supportingText = {
-                        Text("Enter $MIN_SNOOZE_MINUTES-$MAX_SNOOZE_MINUTES minutes")
-                    }
-                )
-                Text("Repeat", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    alarmDayLabels.forEach { (dayNum, dayName) ->
-                        DayToggleChip(
-                            label = dayName.take(1),
-                            isSelected = dayNum in selectedDays,
-                            onClick = {
-                                selectedDays = if (dayNum in selectedDays) {
-                                    selectedDays - dayNum
-                                } else {
-                                    selectedDays + dayNum
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(
-                        hour.toIntOrNull() ?: 0,
-                        minute.toIntOrNull() ?: 0,
-                        label,
-                        selectedSound?.stableId ?: DEFAULT_ALARM_STABLE_ID,
-                        selectedDays.toList(),
-                        am,
-                        parsedSnoozeMinutes ?: DEFAULT_SNOOZE_MINUTES
-                    )
-                },
-                enabled = parsedSnoozeMinutes != null
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -876,8 +929,8 @@ private fun SoundSheetRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlarmScreen(
-    navController: NavController,
-    alarmViewModel: AlarmViewModel
+    alarmViewModel: AlarmViewModel,
+    contentPadding: PaddingValues
 ) {
     val app = LocalContext.current.applicationContext as AlarmClockApplication
     val context = LocalContext.current
@@ -888,13 +941,13 @@ fun AlarmScreen(
     val availableSounds = soundUiState.defaultSounds + soundUiState.customSounds
     val soundsById = availableSounds.associateBy { it.stableId }
     val notificationsEnabled = hasNotificationAccess(context)
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showExactAlarmPermissionDialog by remember { mutableStateOf(false) }
-    var showNotificationPermissionDialog by remember { mutableStateOf(false) }
-    var selectedAlarmIds by remember { mutableStateOf(setOf<Int>()) }
-    var soundPickerAlarmId by remember { mutableStateOf<Int?>(null) }
-    var timePickerAlarmId by remember { mutableStateOf<Int?>(null) }
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showExactAlarmPermissionDialog by rememberSaveable { mutableStateOf(false) }
+    var showNotificationPermissionDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedAlarmIds by rememberSaveable { mutableStateOf(listOf<Int>()) }
+    var soundPickerAlarmId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var timePickerAlarmId by rememberSaveable { mutableStateOf<Int?>(null) }
     val soundPickerAlarm = soundPickerAlarmId?.let(uiState.alarms::get)
     val timePickerAlarm = timePickerAlarmId?.let(uiState.alarms::get)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -917,40 +970,12 @@ fun AlarmScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        TextButton(
-                            onClick = { navController.navigate("clock") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Clock") }
-                        TextButton(
-                            onClick = { navController.navigate("alarms") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Alarms") }
-                        TextButton(
-                            onClick = { navController.navigate("sounds") },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Sounds") }
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true }
-            ) {
-                Icon(Icons.Default.AddCircle, contentDescription = "Add alarm")
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             if (!notificationsEnabled) {
                 NotificationPermissionCard(
                     onRequestAccess = requestNotificationAccess
@@ -982,7 +1007,7 @@ fun AlarmScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -993,7 +1018,7 @@ fun AlarmScreen(
                         isSelected = alarm.alarmId in selectedAlarmIds,
                         onSelectionChange = { isChecked ->
                             selectedAlarmIds = if (isChecked) {
-                                selectedAlarmIds + alarm.alarmId
+                                (selectedAlarmIds + alarm.alarmId).distinct()
                             } else {
                                 selectedAlarmIds - alarm.alarmId
                             }
@@ -1027,21 +1052,30 @@ fun AlarmScreen(
                 }
             }
         }
+
+        FloatingActionButton(
+            onClick = { showAddDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.AddCircle, contentDescription = "Add alarm")
+        }
     }
 
     if (showDeleteDialog) {
         DeleteAlarmConfirmationDialog(
             onDismiss = { showDeleteDialog = false },
             onConfirm = {
-                alarmViewModel.deleteAlarms(selectedAlarmIds)
-                selectedAlarmIds = emptySet()
+                alarmViewModel.deleteAlarms(selectedAlarmIds.toSet())
+                selectedAlarmIds = emptyList()
                 showDeleteDialog = false
             }
         )
     }
 
     if (showAddDialog) {
-        AlarmEditorDialog(
+        AlarmEditorSheet(
             availableSounds = availableSounds,
             onDismiss = { showAddDialog = false },
             onConfirm = { hour, minute, label, soundId, days, am, snoozeMinutes ->
