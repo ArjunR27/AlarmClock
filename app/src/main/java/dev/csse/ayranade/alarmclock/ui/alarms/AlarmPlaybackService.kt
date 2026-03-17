@@ -2,6 +2,7 @@ package dev.csse.ayranade.alarmclock.ui.alarms
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.media.AudioAttributes
@@ -122,6 +123,7 @@ class AlarmPlaybackService : Service() {
         )
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(ALARM_NOTIFICATION_ID, notification)
+        showAlarmControls(alarmId)
 
         val soundUri = sound?.fileUri ?: return stopRinging()
         if (!playAlarm(soundUri)) {
@@ -174,6 +176,16 @@ class AlarmPlaybackService : Service() {
         currentPlayer = null
     }
 
+    private fun showAlarmControls(alarmId: Int) {
+        runCatching {
+            AlarmScheduler.buildAlarmContentPendingIntent(this, alarmId).send()
+        }.onFailure { error ->
+            if (error !is PendingIntent.CanceledException) {
+                throw error
+            }
+        }
+    }
+
     private fun buildNotification(
         alarmId: Int,
         title: String,
@@ -187,7 +199,6 @@ class AlarmPlaybackService : Service() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
-            .setSilent(true)
             .setOnlyAlertOnce(true)
             .setFullScreenIntent(
                 AlarmScheduler.buildAlarmContentPendingIntent(this, alarmId),

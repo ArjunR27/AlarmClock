@@ -220,6 +220,12 @@ class AlarmViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    fun updateAlarmSnooze(alarmId: Int, snoozeMinutes: Int) {
+        updateExistingAlarm(alarmId) { alarm ->
+            alarm.copy(snoozeMinutes = normalizeSnoozeMinutes(snoozeMinutes))
+        }
+    }
+
     fun toggleAlarmDay(alarmId: Int, dayOfWeek: Int) {
         updateExistingAlarm(alarmId) { alarm ->
             val updatedDays = if (dayOfWeek in alarm.daysOfWeek) {

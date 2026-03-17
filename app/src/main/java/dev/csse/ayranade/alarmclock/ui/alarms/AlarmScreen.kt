@@ -115,6 +115,9 @@ private fun formatAlarmSound(alarm: Alarm, soundsById: Map<String, AlarmSound>):
         ?: if (soundId == DEFAULT_ALARM_STABLE_ID) DEFAULT_ALARM_SOUND_NAME else "Missing sound"
 }
 
+private fun parseSnoozeMinutes(input: String): Int? =
+    input.toIntOrNull()?.takeIf { it in MIN_SNOOZE_MINUTES..MAX_SNOOZE_MINUTES }
+
 private fun hasNotificationAccess(context: Context): Boolean {
     val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
     if (!notificationsEnabled) {
@@ -163,12 +166,12 @@ private fun AlarmEditorDialog(
     var selectedDays by remember { mutableStateOf(emptySet<Int>()) }
     var selectedSoundId by remember { mutableStateOf(DEFAULT_ALARM_STABLE_ID) }
     var soundMenuExpanded by remember { mutableStateOf(false) }
-    var snoozeMenuExpanded by remember { mutableStateOf(false) }
     var am by remember { mutableStateOf(true) }
-    var selectedSnoozeMinutes by remember { mutableStateOf(DEFAULT_SNOOZE_MINUTES) }
+    var snoozeMinutesText by remember { mutableStateOf(DEFAULT_SNOOZE_MINUTES.toString()) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val selectedSound = availableSounds.firstOrNull { it.stableId == selectedSoundId }
         ?: availableSounds.firstOrNull()
+    val parsedSnoozeMinutes = parseSnoozeMinutes(snoozeMinutesText)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -238,34 +241,23 @@ private fun AlarmEditorDialog(
                         }
                     }
                 }
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = formatSnoozeMinutes(selectedSnoozeMinutes),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Snooze") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clickable { snoozeMenuExpanded = true }
-                    )
-                    DropdownMenu(
-                        expanded = snoozeMenuExpanded,
-                        onDismissRequest = { snoozeMenuExpanded = false }
-                    ) {
-                        SNOOZE_MINUTE_OPTIONS.forEach { snoozeMinutes ->
-                            DropdownMenuItem(
-                                text = { Text(formatSnoozeMinutes(snoozeMinutes)) },
-                                onClick = {
-                                    selectedSnoozeMinutes = snoozeMinutes
-                                    snoozeMenuExpanded = false
-                                }
-                            )
-                        }
+                OutlinedTextField(
+                    value = snoozeMinutesText,
+                    onValueChange = {
+                        snoozeMinutesText = it.filter(Char::isDigit).take(3)
+                    },
+                    label = { Text("Snooze (minutes)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = parsedSnoozeMinutes == null,
+                    supportingText = {
+                        Text("Enter $MIN_SNOOZE_MINUTES-$MAX_SNOOZE_MINUTES minutes")
                     }
-                }
+                )
                 Text("Repeat", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     alarmDayLabels.forEach { (dayNum, dayName) ->
@@ -294,9 +286,10 @@ private fun AlarmEditorDialog(
                         selectedSound?.stableId ?: DEFAULT_ALARM_STABLE_ID,
                         selectedDays.toList(),
                         am,
-                        selectedSnoozeMinutes
+                        parsedSnoozeMinutes ?: DEFAULT_SNOOZE_MINUTES
                     )
-                }
+                },
+                enabled = parsedSnoozeMinutes != null
             ) {
                 Text("Save")
             }
@@ -479,10 +472,15 @@ private fun AlarmCard(
     onLabelCommit: (String) -> Unit,
     onTimeClick: () -> Unit,
     onDayToggle: (Int) -> Unit,
-    onSoundClick: () -> Unit
+    onSoundClick: () -> Unit,
+    onSnoozeCommit: (Int) -> Unit
 ) {
     var labelText by remember(alarm.alarmId, alarm.label) { mutableStateOf(alarm.label) }
+    var snoozeText by remember(alarm.alarmId, alarm.snoozeMinutes) {
+        mutableStateOf(alarm.snoozeMinutes.toString())
+    }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val parsedSnoozeMinutes = parseSnoozeMinutes(snoozeText)
 
     fun commitLabel() {
         if (labelText != alarm.label) {
@@ -490,9 +488,28 @@ private fun AlarmCard(
         }
     }
 
+    fun commitSnooze() {
+        val snoozeMinutes = parsedSnoozeMinutes
+        if (snoozeMinutes == null) {
+            snoozeText = alarm.snoozeMinutes.toString()
+            return
+        }
+
+        if (snoozeMinutes != alarm.snoozeMinutes) {
+            onSnoozeCommit(snoozeMinutes)
+        }
+    }
+
     LaunchedEffect(alarm.label) {
         if (labelText != alarm.label) {
             labelText = alarm.label
+        }
+    }
+
+    LaunchedEffect(alarm.snoozeMinutes) {
+        val normalizedAlarmSnooze = alarm.snoozeMinutes.toString()
+        if (snoozeText != normalizedAlarmSnooze) {
+            snoozeText = normalizedAlarmSnooze
         }
     }
 
@@ -589,6 +606,36 @@ private fun AlarmCard(
             AlarmSoundPill(
                 soundName = soundName,
                 onClick = onSoundClick
+            )
+
+            OutlinedTextField(
+                value = snoozeText,
+                onValueChange = {
+                    snoozeText = it.filter(Char::isDigit).take(3)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            commitSnooze()
+                        }
+                    },
+                label = { Text("Snooze (minutes)") },
+                singleLine = true,
+                isError = parsedSnoozeMinutes == null,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        commitSnooze()
+                        keyboardController?.hide()
+                    }
+                ),
+                supportingText = {
+                    Text("Enter $MIN_SNOOZE_MINUTES-$MAX_SNOOZE_MINUTES minutes")
+                }
             )
 
             FlowRow(
@@ -972,6 +1019,9 @@ fun AlarmScreen(
                         },
                         onSoundClick = {
                             soundPickerAlarmId = alarm.alarmId
+                        },
+                        onSnoozeCommit = { snoozeMinutes ->
+                            alarmViewModel.updateAlarmSnooze(alarm.alarmId, snoozeMinutes)
                         }
                     )
                 }
